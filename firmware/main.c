@@ -205,11 +205,12 @@ const uint8_t sin_table[] PROGMEM = {
 */
 //スピーカーボリューム，アタック音／余韻に使う
 volatile	unsigned char	Volume;
-volatile	unsigned char	DirVolume;
+volatile	unsigned char	DirVolume;	//警報音拡大/縮小方向の指示用。2で大きくなり、1で小さくなる。
 
 //関数宣言
 int suspend( void );
 void check_sensor( void );
+char idleCondition( void );
 
 
 //タイマー2オーバーフロー割込み
@@ -341,9 +342,7 @@ int main( void )
 	while(1){
 		
 		//警報機の鳴動を止める
-		if(			CLOSE_SWITCH_PIN == 0 &&
-					bit_is_set(TIFR1,TOV1) &&
-					CLOSE_DCC_PIN	== 0)	//入力ピンチェック
+		if(	idleCondition()	)	//入力ピンチェック
 		{
 			timeOfClose	= 0;	//遮断機の経過時間を元に戻す
 			suspend();
@@ -412,21 +411,34 @@ int suspend( void )
 	
 	_delay_ms(200);	//チャタリング対策で時間待ち
 	
-	OPENGATE_PORT	= 1;	//遮断機を上げる
+	//遮断機を上げる
+	OPENGATE_PORT	= 1;
 	
 	//スピーカーを止める
 	OCR2B	= 0;
 
-	while(		CLOSE_SWITCH_PIN == 0 &&
-				bit_is_set(TIFR1,TOV1) &&
-				CLOSE_DCC_PIN	== 0)	//入力ピンチェック
+	while(	idleCondition()	)	//入力ピンチェック
 	{
 		check_sensor();
 	}
 	_delay_ms(100);		//チャタリング対策で時間待ち	
-	OPENGATE_PORT	= 0;	//遮断機の降下信号を停止
+	OPENGATE_PORT	= 0;	//遮断機の上昇信号を停止
 	DirVolume	= 1;		//音を鳴らさせる
 	return 0;
+}
+
+//警報機が鳴動しない条件の設定
+char idleCondition( void )
+{
+	char p;
+	
+	p = 1;
+	
+	//p &=	( CLOSE_SWITCH_PIN == 0 );
+	p &=	( bit_is_set(TIFR1,TOV1) );
+	p &=	CLOSE_DCC_PIN	== 0;
+	
+	return p;
 }
 
 void check_sensor( void )
